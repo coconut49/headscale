@@ -82,10 +82,28 @@ func mergeDERPMaps(derpMaps []*tailcfg.DERPMap) *tailcfg.DERPMap {
 
 func GetDERPMap(cfg types.DERPConfig) *tailcfg.DERPMap {
 	var derpMaps []*tailcfg.DERPMap
-	if cfg.DERPMap != nil {
-		derpMaps = append(derpMaps, cfg.DERPMap)
+
+	// First load from remote URLs (lowest precedence)
+	for _, addr := range cfg.URLs {
+		derpMap, err := loadDERPMapFromURL(addr)
+		log.Debug().
+			Str("func", "GetDERPMap").
+			Str("url", addr.String()).
+			Msg("Loading DERPMap from URL")
+		if err != nil {
+			log.Error().
+				Str("func", "GetDERPMap").
+				Str("url", addr.String()).
+				Err(err).
+				Msg("Could not load DERP map from URL")
+
+			break
+		}
+
+		derpMaps = append(derpMaps, derpMap)
 	}
 
+	// Then load from local paths (medium precedence)
 	for _, path := range cfg.Paths {
 		log.Debug().
 			Str("func", "GetDERPMap").
@@ -105,23 +123,9 @@ func GetDERPMap(cfg types.DERPConfig) *tailcfg.DERPMap {
 		derpMaps = append(derpMaps, derpMap)
 	}
 
-	for _, addr := range cfg.URLs {
-		derpMap, err := loadDERPMapFromURL(addr)
-		log.Debug().
-			Str("func", "GetDERPMap").
-			Str("url", addr.String()).
-			Msg("Loading DERPMap from path")
-		if err != nil {
-			log.Error().
-				Str("func", "GetDERPMap").
-				Str("url", addr.String()).
-				Err(err).
-				Msg("Could not load DERP map from path")
-
-			break
-		}
-
-		derpMaps = append(derpMaps, derpMap)
+	// Finally add the in-memory map if present (highest precedence)
+	if cfg.DERPMap != nil {
+		derpMaps = append(derpMaps, cfg.DERPMap)
 	}
 
 	derpMap := mergeDERPMaps(derpMaps)
